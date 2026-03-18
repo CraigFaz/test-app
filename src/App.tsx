@@ -1,42 +1,97 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import './App.css'
 
 function randomColor() {
   const h = Math.floor(Math.random() * 360)
-  return `hsl(${h}, 70%, 55%)`
+  return `hsl(${h}, 70%, 58%)`
+}
+
+interface Ripple {
+  id: number
+  x: number
+  y: number
+}
+
+function ColorButton({ label, color, onColorChange, onCount }: {
+  label: string
+  color: string
+  onColorChange: (color: string) => void
+  onCount: () => void
+}) {
+  const [ripples, setRipples] = useState<Ripple[]>([])
+  const nextId = useRef(0)
+
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const id = nextId.current++
+    setRipples(prev => [...prev, { id, x, y }])
+    setTimeout(() => setRipples(prev => prev.filter(r => r.id !== id)), 700)
+    onColorChange(randomColor())
+    onCount()
+  }
+
+  return (
+    <div className="button-wrap">
+      <button
+        className="color-btn"
+        style={{
+          backgroundColor: color,
+          boxShadow: `0 0 28px ${color}99, 0 0 60px ${color}44`,
+        }}
+        onClick={handleClick}
+      >
+        {ripples.map(r => (
+          <span key={r.id} className="ripple" style={{ left: r.x, top: r.y }} />
+        ))}
+        {label}
+      </button>
+      <span className="color-code" style={{ color }}>{color}</span>
+    </div>
+  )
 }
 
 function App() {
-  const [color, setColor] = useState('#6366f1')
+  const [colors, setColors] = useState(['#f43f5e', '#6366f1', '#10b981'])
+  const [total, setTotal] = useState(0)
+
+  const handleColorChange = (index: number, color: string) => {
+    setColors(prev => {
+      const next = [...prev]
+      next[index] = color
+      return next
+    })
+  }
+
+  const labels = ['Button A', 'Button B', 'Button C']
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: '#0f0f0f',
-      gap: '1.5rem',
-    }}>
-      <h1 style={{ color: '#fff', fontFamily: 'sans-serif', margin: 0 }}>Color Changer</h1>
-      <button
-        onClick={() => setColor(randomColor())}
-        style={{
-          backgroundColor: color,
-          color: '#fff',
-          border: 'none',
-          borderRadius: '12px',
-          padding: '1rem 2.5rem',
-          fontSize: '1.25rem',
-          fontFamily: 'sans-serif',
-          cursor: 'pointer',
-          transition: 'background-color 0.3s ease',
-          boxShadow: `0 0 24px ${color}88`,
-        }}
-      >
-        Click me!
-      </button>
-      <p style={{ color: '#888', fontFamily: 'monospace', margin: 0 }}>{color}</p>
+    <div className="app">
+      <div className="blob blob-0" style={{ background: colors[0] }} />
+      <div className="blob blob-1" style={{ background: colors[1] }} />
+      <div className="blob blob-2" style={{ background: colors[2] }} />
+
+      <div className="content">
+        <h1 className="title">Color Changer</h1>
+
+        <div className="counter-display">
+          <span className="counter-label">Total Clicks</span>
+          <span className="counter-number" key={total}>{total}</span>
+        </div>
+
+        <div className="buttons">
+          {colors.map((color, i) => (
+            <ColorButton
+              key={i}
+              label={labels[i]}
+              color={color}
+              onColorChange={(c) => handleColorChange(i, c)}
+              onCount={() => setTotal(t => t + 1)}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
