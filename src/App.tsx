@@ -1,99 +1,116 @@
-import { useState, useRef } from 'react'
+import { useRef, useState } from 'react'
 import './App.css'
+import { StoreProvider, useStore } from './store'
+import { GroupList } from './components/GroupList'
+import type { AppState } from './types'
 
-function randomColor() {
-  const h = Math.floor(Math.random() * 360)
-  return `hsl(${h}, 70%, 58%)`
-}
+function AppInner() {
+  const { state, dispatch } = useStore()
+  const [search, setSearch] = useState('')
+  const importRef = useRef<HTMLInputElement>(null)
 
-interface Ripple {
-  id: number
-  x: number
-  y: number
-}
-
-function ColorButton({ label, color, onColorChange, onCount }: {
-  label: string
-  color: string
-  onColorChange: (color: string) => void
-  onCount: () => void
-}) {
-  const [ripples, setRipples] = useState<Ripple[]>([])
-  const nextId = useRef(0)
-
-  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-    const id = nextId.current++
-    setRipples(prev => [...prev, { id, x, y }])
-    setTimeout(() => setRipples(prev => prev.filter(r => r.id !== id)), 700)
-    onColorChange(randomColor())
-    onCount()
+  function handleExport() {
+    const json = JSON.stringify(state, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'list-organizer.json'
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
-  return (
-    <div className="button-wrap">
-      <button
-        className="color-btn"
-        style={{
-          backgroundColor: color,
-          boxShadow: `0 0 28px ${color}99, 0 0 60px ${color}44`,
-        }}
-        onClick={handleClick}
-      >
-        {ripples.map(r => (
-          <span key={r.id} className="ripple" style={{ left: r.x, top: r.y }} />
-        ))}
-        {label}
-      </button>
-      <span className="color-code" style={{ color }}>{color}</span>
-    </div>
-  )
-}
-
-function App() {
-  const [colors, setColors] = useState(['#f43f5e', '#6366f1', '#10b981'])
-  const [total, setTotal] = useState(0)
-
-  const handleColorChange = (index: number, color: string) => {
-    setColors(prev => {
-      const next = [...prev]
-      next[index] = color
-      return next
-    })
+  function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string) as AppState
+        if (!Array.isArray(parsed?.groups)) throw new Error('Invalid format')
+        dispatch({ type: 'IMPORT_STATE', state: parsed })
+      } catch {
+        alert('Invalid JSON file. Please export from this app and import the same format.')
+      }
+    }
+    reader.readAsText(file)
+    e.target.value = ''
   }
 
-  const labels = ['Button A', 'Button B', 'Button C']
+  const totalItems = state.groups.reduce((sum, g) => sum + g.items.length, 0)
+  const checkedItems = state.groups.reduce((sum, g) => sum + g.items.filter(i => i.checked).length, 0)
 
   return (
     <div className="app">
-      <div className="blob blob-0" style={{ background: colors[0] }} />
-      <div className="blob blob-1" style={{ background: colors[1] }} />
-      <div className="blob blob-2" style={{ background: colors[2] }} />
+      <header className="app-header">
+        <h1>
+          List Organizer
+          <span style={{ fontSize: '0.7em', fontWeight: 400, color: 'var(--text-muted)', marginLeft: 8 }}>
+            {checkedItems}/{totalItems}
+          </span>
+        </h1>
+        <div className="header-actions">
+          <button
+            className="btn btn--secondary btn--sm"
+            onClick={() => dispatch({ type: 'ADD_GROUP' })}
+            title="Add new group"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Group
+          </button>
 
-      <div className="content">
-        <h1 className="title">Color Changer</h1>
+          <button
+            className="btn btn--secondary btn--sm"
+            onClick={handleExport}
+            title="Export as JSON"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Export
+          </button>
 
-        <div className="counter-display">
-          <span className="counter-label">Total Clicks</span>
-          <span className="counter-number" key={total}>{total}</span>
+          <button
+            className="btn btn--secondary btn--sm"
+            onClick={() => importRef.current?.click()}
+            title="Import JSON"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            Import
+          </button>
+          <input ref={importRef} type="file" accept=".json" onChange={handleImport} hidden />
         </div>
+      </header>
 
-        <div className="buttons">
-          {colors.map((color, i) => (
-            <ColorButton
-              key={i}
-              label={labels[i]}
-              color={color}
-              onColorChange={(c) => handleColorChange(i, c)}
-              onCount={() => setTotal(t => t + 1)}
-            />
-          ))}
-        </div>
+      <div className="search-bar">
+        <input
+          className="search-input"
+          type="search"
+          placeholder="Search items…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
       </div>
+
+      <main className="app-main">
+        <GroupList search={search} />
+      </main>
     </div>
   )
 }
 
-export default App
+export default function App() {
+  return (
+    <StoreProvider>
+      <AppInner />
+    </StoreProvider>
+  )
+}
