@@ -3,6 +3,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Item } from '../types';
 import { useStore } from '../store';
+import { useSelection } from '../SelectionContext';
 
 interface Props {
   item: Item;
@@ -12,9 +13,12 @@ interface Props {
 
 export function ItemRow({ item, groupId, overlay = false }: Props) {
   const { dispatch } = useStore();
+  const { selectedIds, toggleSelection, isSelecting } = useSelection();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(item.name);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const selected = selectedIds.has(item.id);
 
   const {
     attributes,
@@ -62,8 +66,27 @@ export function ItemRow({ item, groupId, overlay = false }: Props) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`item-row${overlay ? ' item-row--overlay' : ''}${isDragging ? ' item-row--dragging' : ''}`}
+      className={[
+        'item-row',
+        overlay ? 'item-row--overlay' : '',
+        isDragging ? 'item-row--dragging' : '',
+        selected ? 'item-row--selected' : '',
+      ].filter(Boolean).join(' ')}
     >
+      <button
+        className={`selection-toggle${selected ? ' selection-toggle--selected' : ''}${isSelecting ? ' selection-toggle--visible' : ''}`}
+        onClick={() => toggleSelection(item.id)}
+        aria-label={selected ? 'Deselect item' : 'Select item'}
+        title={selected ? 'Deselect' : 'Select'}
+        tabIndex={-1}
+      >
+        {selected && (
+          <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="3.5">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        )}
+      </button>
+
       <button
         ref={setActivatorNodeRef}
         className="drag-handle"

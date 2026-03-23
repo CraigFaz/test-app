@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { arrayMove } from '@dnd-kit/sortable';
-import type { AppState, AppAction, Group } from './types';
+import type { AppState, AppAction, Group, Item } from './types';
 import { createInitialState } from './data';
 
 const STORAGE_KEY = 'list-organizer-state';
@@ -166,6 +166,36 @@ function reducer(state: AppState, action: AppAction): AppState {
           if (g.id === fromGroupId) return { ...g, items: newFromItems };
           if (g.id === toGroupId) return { ...g, items: newToItems };
           return g;
+        }),
+      };
+    }
+
+    case 'BULK_MOVE_ITEMS_TO_GROUP': {
+      const { itemIds, toGroupId } = action;
+      const idSet = new Set(itemIds);
+      const itemsToAppend: Item[] = [];
+      const pruned = state.groups.map((g) => {
+        g.items.filter((i) => idSet.has(i.id)).forEach((item) => itemsToAppend.push(item));
+        return { ...g, items: g.items.filter((i) => !idSet.has(i.id)) };
+      });
+      return {
+        ...state,
+        groups: pruned.map((g) =>
+          g.id === toGroupId ? { ...g, items: [...g.items, ...itemsToAppend] } : g
+        ),
+      };
+    }
+
+    case 'BULK_MOVE_ITEMS_TO_POSITION': {
+      const { itemIds, position } = action;
+      const idSet = new Set(itemIds);
+      return {
+        ...state,
+        groups: state.groups.map((g) => {
+          const selected = g.items.filter((i) => idSet.has(i.id));
+          if (selected.length === 0) return g;
+          const rest = g.items.filter((i) => !idSet.has(i.id));
+          return { ...g, items: position === 'top' ? [...selected, ...rest] : [...rest, ...selected] };
         }),
       };
     }

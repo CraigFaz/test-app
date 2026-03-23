@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -16,6 +16,7 @@ import type {
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useStore, findGroupOfItem } from '../store';
+import { SelectionContext } from '../SelectionContext';
 import { Group } from './Group';
 import { ItemRow } from './ItemRow';
 import type { Item } from '../types';
@@ -28,6 +29,7 @@ export function GroupList({ search = '' }: GroupListProps) {
   const { state, dispatch } = useStore();
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
   const activeItemGroupRef = useRef<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -36,6 +38,19 @@ export function GroupList({ search = '' }: GroupListProps) {
 
   const groupIds = state.groups.map((g) => g.id);
   const searchLower = search.toLowerCase();
+
+  const toggleSelection = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const isSelecting = selectedIds.size > 0;
 
   function isGroupId(id: string) {
     return state.groups.some((g) => g.id === id);
@@ -59,7 +74,7 @@ export function GroupList({ search = '' }: GroupListProps) {
     const overId = over.id as string;
 
     if (activeId === overId) return;
-    if (isGroupId(activeId)) return; // group dragging handled in dragEnd
+    if (isGroupId(activeId)) return;
 
     const fromGroupId = activeItemGroupRef.current;
     if (!fromGroupId) return;
@@ -112,7 +127,6 @@ export function GroupList({ search = '' }: GroupListProps) {
     activeItemGroupRef.current = null;
   }
 
-  // Find the active item for DragOverlay
   let activeItem: Item | null = null;
   let activeItemGroupId: string | null = null;
   if (activeId && !isGroupId(activeId as string)) {
@@ -123,32 +137,85 @@ export function GroupList({ search = '' }: GroupListProps) {
   }
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext items={groupIds} strategy={verticalListSortingStrategy}>
-        <div className="group-list">
-          {state.groups.map((group) => {
-            const filteredGroup = searchLower
-              ? { ...group, items: group.items.filter(i => i.name.toLowerCase().includes(searchLower)) }
-              : group;
-            if (searchLower && filteredGroup.items.length === 0) return null;
-            return (
-              <Group key={group.id} group={filteredGroup} activeItemId={activeId as string | null} />
-            );
-          })}
-        </div>
-      </SortableContext>
+    <SelectionContext.Provider value={{ selectedIds, toggleSelection, clearSelection, isSelecting }}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={groupIds} strategy={verticalListSortingStrategy}>
+          <div className={`group-list${isSelecting ? ' group-list--selecting' : ''}`}>
+            {state.groups.map((group) => {
+              const filteredGroup = searchLower
+                ? { ...group, items: group.items.filter(i => i.name.toLowerCase().includes(searchLower)) }
+                : group;
+              if (searchLower && filteredGroup.items.length === 0) return null;
+              return (
+                <Group key={group.id} group={filteredGroup} activeItemId={activeId as string | null} />
+              );
+            })}
+          </div>
+        </SortableContext>
 
-      <DragOverlay>
-        {activeItem && activeItemGroupId ? (
-          <ItemRow item={activeItem} groupId={activeItemGroupId} overlay />
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+        <DragOverlay>
+          {activeItem && activeItemGroupId ? (
+            <ItemRow item={activeItem} groupId={activeItemGroupId} overlay />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+
+      {isSelecting && (
+        <div className="selection-bar">
+          <span className="selection-bar__count">{selectedIds.size} selected</span>
+          <select
+            className="selection-bar__group-select"
+            value=""
+            onChange={(e) => {
+              if (e.target.value) {
+                dispatch({ type: 'BULK_MOVE_ITEMS_TO_GROUP', itemIds: [...selectedIds], toGroupId: e.target.value });
+                clearSelection();
+              }
+            }}
+          >
+            <option value="">Move to group…</option>
+            {state.groups.map((g) => (
+              <option key={g.id} value={g.id}>{g.title}</option>
+            ))}
+          </select>
+          <button
+            className="btn btn--secondary btn--sm"
+            onClick={() => {
+              dispatch({ type: 'BULK_MOVE_ITEMS_TO_POSITION', itemIds: [...selectedIds], position: 'top' });
+              clearSelection();
+            }}
+            title="Move selected to top of their group"
+          >
+            ↑ Top
+          </button>
+          <button
+            className="btn btn--secondary btn--sm"
+            onClick={() => {
+              dispatch({ type: 'BULK_MOVE_ITEMS_TO_POSITION', itemIds: [...selectedIds], position: 'bottom' });
+              clearSelection();
+            }}
+            title="Move selected to bottom of their group"
+          >
+            ↓ Bottom
+          </button>
+          <button
+            className="icon-btn selection-bar__clear"
+            onClick={clearSelection}
+            aria-label="Clear selection"
+            title="Clear selection"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      )}
+    </SelectionContext.Provider>
   );
 }
