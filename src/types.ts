@@ -35,4 +35,6 @@ export type AppAction =
   | { type: 'TOGGLE_ITEM_CHECK'; groupId: string; itemId: string }
   | { type: 'REORDER_ITEMS'; groupId: string; activeId: string; overId: string }
   | { type: 'MOVE_ITEM_TO_GROUP'; itemId: string; fromGroupId: string; toGroupId: string; overItemId: string | null }
+  | { type: 'BULK_MOVE_ITEMS_TO_GROUP'; itemIds: string[]; toGroupId: string }
+  | { type: 'BULK_MOVE_ITEMS_TO_POSITION'; itemIds: string[]; position: 'top' | 'bottom' }
   | { type: 'IMPORT_STATE'; state: AppState };
